@@ -8,6 +8,10 @@
 #
 # SPDX-License-Identifier:    BSD-3-Clause
 
+# The HID-to-UART protocol implemented by CP2110/4 is described in the
+# AN434 document from Silicon Labs:
+# https://www.silabs.com/documents/public/application-notes/AN434-CP2110-4-Interface-Specification.pdf
+
 import struct
 import threading
 
