@@ -3,28 +3,40 @@
 # Backend for Silicon Labs CP2110/4 HID-to-UART devices.
 #
 # This file is part of pySerial. https://github.com/pyserial/pyserial
+# (C) 2001-2015 Chris Liechti <cliechti@gmx.net>
 # (C) 2019 Diego Elio Pettenò <flameeyes@flameeyes.eu>
 #
 # SPDX-License-Identifier:    BSD-3-Clause
 
 import struct
+import threading
+
+try:
+    import Queue
+except ImportError:
+    import queue as Queue
 
 import hid  # hidapi
 
 import serial
-from serial.serialutil import SerialBase, SerialException, portNotOpenError, to_bytes
+from serial.serialutil import SerialBase, SerialException, portNotOpenError, to_bytes, Timeout
 
 
 class Serial(SerialBase):
 
     def __init__(self, *args, **kwargs):
+        self._read_buffer = None
+        self.logger = None
         super(Serial, self).__init__(*args, **kwargs)
 
     def open(self):
+        self.logger = None
         if self._port is None:
             raise SerialException("Port must be configured before it can be used.")
         if self.is_open:
             raise SerialException("Port is already open.")
+
+        self._read_buffer = Queue.Queue()
 
         self._hid_handle = hid.device()
         self._hid_handle.open(0x10c4, 0xea80)
@@ -40,7 +52,19 @@ class Serial(SerialBase):
             raise
         else:
             self.is_open = True
+            self._thread = threading.Thread(target=self._hid_read_loop)
+            self._thread.setDaemon(True)
+            self._thread.setName('pySerial CP2110 reader thread for {}'.format(self._port))
+            self._thread.start()
 
+    def close(self):
+        self.is_open = False
+        if self._thread:
+            self._thread.join(7)  # XXX more than socket timeout
+            self._thread = None
+            # in case of quick reconnects, give the server some time
+            time.sleep(0.3)
+        self._hid_handle = None
 
     def _reconfigure_port(self, force_update=False):
         parity_value = None
@@ -97,18 +121,36 @@ class Serial(SerialBase):
 
     @property
     def in_waiting(self):
-        uart_status_report = self._hid_handle.get_feature_report(0x42, 7)
-        _, tx_fifo, rx_fifo, error_status, break_status = struct.unpack(
-            '>BHHBB', bytes(uart_status_report))
+        return self._read_buffer.qsize()
 
-        return rx_fifo
+    def reset_input_buffer(self):
+        """Clear input buffer, discarding all that is in the buffer."""
+        if not self.is_open:
+            raise portNotOpenError
+        self._hid_handle.write(b'\x43\x02')
+        # empty read buffer
+        while self._read_buffer.qsize():
+            self._read_buffer.get(False)
 
     def read(self, size=1):
         if not self.is_open:
             raise portNotOpenError
-        read = self._hid_handle.read(size + 1)
 
-        return bytes(read[1:])
+        data = bytearray()
+        try:
+            timeout = Timeout(self._timeout)
+            while len(data) < size:
+                if self._thread is None:
+                    raise SerialException('connection failed (reader thread died)')
+                buf = self._read_buffer.get(True, timeout.time_left())
+                if buf is None:
+                    return bytes(data)
+                data += buf
+                if timeout.expired():
+                    break
+        except Queue.Empty:  # -> timeout
+            pass
+        return bytes(data)
 
     def write(self, data):
         if not self.is_open:
@@ -122,3 +164,20 @@ class Serial(SerialBase):
             
             d = d[to_be_sent:]
             tx_len = len(d)
+
+    def _hid_read_loop(self):
+        try:
+            while self.is_open:
+                try:
+                    data = self._hid_handle.read(64)
+                    data_len = data.pop(0)
+                    assert data_len == len(data)
+                    self._read_buffer.put(bytearray(data))
+                except:
+                    break
+                if not data:
+                    self._read_buffer.put(None)
+        finally:
+            self._thread = None
+            if self.logger:
+                self.logger.debug("read thread terminated")
