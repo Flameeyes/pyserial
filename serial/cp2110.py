@@ -72,6 +72,7 @@ class Serial(SerialBase):
         if self._thread:
             self._thread.join(7)  # XXX more than socket timeout
             self._thread = None
+        self._hid_handle.close()
         self._hid_handle = None
 
     def _reconfigure_port(self, force_update=False):
@@ -180,7 +181,9 @@ class Serial(SerialBase):
         try:
             while self.is_open:
                 try:
-                    data = self._hid_handle.read(64)
+                    data = self._hid_handle.read(64, timeout_ms=100)
+                    if not data:
+                        continue
                     data_len = data.pop(0)
                     assert data_len == len(data)
                     self._read_buffer.put(bytearray(data))
