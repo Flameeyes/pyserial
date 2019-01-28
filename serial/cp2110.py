@@ -23,6 +23,12 @@ from serial.serialutil import SerialBase, SerialException, portNotOpenError, to_
 
 
 class Serial(SerialBase):
+    # This is not quite correct. AN343 specifies that the minimum
+    # baudrate is different between CP2110 and CP2114, and it's halved
+    # when using non-8-bit symbols.
+    BAUDRATES = (300, 375, 600, 1200, 1800, 2400, 4800, 9600, 19200,
+                 38400, 57600, 115200, 230400, 460800, 500000, 576000,
+                 921600, 1000000)
 
     def __init__(self, *args, **kwargs):
         self._read_buffer = None
