@@ -72,8 +72,6 @@ class Serial(SerialBase):
         if self._thread:
             self._thread.join(7)  # XXX more than socket timeout
             self._thread = None
-            # in case of quick reconnects, give the server some time
-            time.sleep(0.3)
         self._hid_handle = None
 
     def _reconfigure_port(self, force_update=False):
