@@ -81,7 +81,10 @@ class Serial(SerialBase):
         else:
             raise ValueError('Invalid parity: {!r}'.format(self._parity))
 
-        flow_control_value = 0x00
+        if self.rtscts:
+            flow_control_value = 0x01
+        else:
+            flow_control_value = 0x00
 
         data_bits_value = None
         if self._bytesize == 5:
