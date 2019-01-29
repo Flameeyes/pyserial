@@ -14,7 +14,6 @@
 
 import struct
 import threading
-import time
 
 try:
     import Queue
@@ -148,6 +147,7 @@ class Serial(SerialBase):
 
         self._hid_handle.send_feature_report(
             bytes((_REPORT_GETSET_UART_ENABLE, _ENABLE_UART)))
+        self._update_break_state()
 
     @property
     def in_waiting(self):
@@ -168,18 +168,19 @@ class Serial(SerialBase):
         self._hid_handle.send_feature_report(
             bytes((_REPORT_SET_PURGE_FIFOS, _PURGE_TX_FIFO)))
 
-    def send_break(self, duration=0.25):
+    def _update_break_state(self):
         if not self.is_open:
             raise portNotOpenError
-        # We can't use the parameter for Line Break Time, because it
-        # has a limit of 125ms, which is below the default of
-        # pyserial. Instead it uses the value 0 and sleeps
-        # synchronously.
-        self._hid_handle.send_feature_report(
-            bytes((_REPORT_SET_TRANSMIT_LINE_BREAK, 0)))
-        time.sleep(duration)
-        self._hid_handle.send_feature_report(
-            bytes((_REPORT_SET_STOP_LINE_BREAK)))
+
+        if self._break_state:
+            self._hid_handle.send_feature_report(
+                bytes((_REPORT_SET_TRANSMIT_LINE_BREAK, 0)))
+        else:
+            # Note that while AN434 states "There are no data bytes in
+            # the payload other than the Report ID", either hidapi or
+            # Linux does not seem to send the report otherwise.
+            self._hid_handle.send_feature_report(
+                bytes((_REPORT_SET_STOP_LINE_BREAK, 0)))
 
     def read(self, size=1):
         if not self.is_open:
