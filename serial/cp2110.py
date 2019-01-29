@@ -169,7 +169,7 @@ class Serial(SerialBase):
             bytes((_REPORT_SET_PURGE_FIFOS, _PURGE_TX_FIFO)))
 
     def _update_break_state(self):
-        if not self.is_open:
+        if not self._hid_handle:
             raise portNotOpenError
 
         if self._break_state:
