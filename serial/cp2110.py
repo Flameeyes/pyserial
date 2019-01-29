@@ -26,6 +26,18 @@ import serial
 from serial.serialutil import SerialBase, SerialException, portNotOpenError, to_bytes, Timeout
 
 
+# Report IDs and related constant
+_REPORT_GETSET_UART_ENABLE = 0x41
+_DISABLE_UART = 0x00
+_ENABLE_UART = 0x01
+
+_REPORT_SET_PURGE_FIFOS = 0x43
+_PURGE_TX_FIFO = 0x01
+_PURGE_RX_FIFO = 0x02
+
+_REPORT_GETSET_UART_CONFIG = 0x50
+
+
 class Serial(SerialBase):
     # This is not quite correct. AN343 specifies that the minimum
     # baudrate is different between CP2110 and CP2114, and it's halved
@@ -119,7 +131,7 @@ class Serial(SerialBase):
             
         configuration_report = struct.pack(
             '>BLBBBB',
-            0x50,
+            _REPORT_GETSET_UART_CONFIG,
             self._baudrate,
             parity_value,
             flow_control_value,
@@ -128,21 +140,27 @@ class Serial(SerialBase):
 
         self._hid_handle.send_feature_report(configuration_report)
 
-        enable_report = struct.pack('>BB', 0x41, 0x01)
-        self._hid_handle.send_feature_report(enable_report)
+        self._hid_handle.send_feature_report(
+            bytes((_REPORT_GETSET_UART_ENABLE, _ENABLE_UART)))
 
     @property
     def in_waiting(self):
         return self._read_buffer.qsize()
 
     def reset_input_buffer(self):
-        """Clear input buffer, discarding all that is in the buffer."""
         if not self.is_open:
             raise portNotOpenError
-        self._hid_handle.write(b'\x43\x02')
+        self._hid_handle.send_feature_report(
+            bytes((_REPORT_SET_PURGE_FIFOS, _PURGE_RX_FIFO)))
         # empty read buffer
         while self._read_buffer.qsize():
             self._read_buffer.get(False)
+
+    def reset_output_buffer(self):
+        if not self.is_open:
+            raise portNotOpenError
+        self._hid_handle.send_feature_report(
+            bytes((_REPORT_SET_PURGE_FIFOS, _PURGE_TX_FIFO)))
 
     def read(self, size=1):
         if not self.is_open:
