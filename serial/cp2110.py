@@ -69,11 +69,9 @@ class Serial(SerialBase):
         self._hid_handle = None
         self._read_buffer = None
         self._thread = None
-        self.logger = None
         super(Serial, self).__init__(*args, **kwargs)
 
     def open(self):
-        self.logger = None
         if self._port is None:
             raise SerialException("Port must be configured before it can be used.")
         if self.is_open:
@@ -262,5 +260,3 @@ class Serial(SerialBase):
                     self._read_buffer.put(None)
         finally:
             self._thread = None
-            if self.logger:
-                self.logger.debug("read thread terminated")
