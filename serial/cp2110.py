@@ -37,6 +37,9 @@ _PURGE_RX_FIFO = 0x02
 
 _REPORT_GETSET_UART_CONFIG = 0x50
 
+_REPORT_SET_TRANSMIT_LINE_BREAK = 0x51
+_REPORT_SET_STOP_LINE_BREAK = 0x52
+
 
 class Serial(SerialBase):
     # This is not quite correct. AN343 specifies that the minimum
@@ -161,6 +164,19 @@ class Serial(SerialBase):
             raise portNotOpenError
         self._hid_handle.send_feature_report(
             bytes((_REPORT_SET_PURGE_FIFOS, _PURGE_TX_FIFO)))
+
+    def send_break(self, duration=0.25):
+        if not self.is_open:
+            raise portNotOpenError
+        # We can't use the parameter for Line Break Time, because it
+        # has a limit of 125ms, which is below the default of
+        # pyserial. Instead it uses the value 0 and sleeps
+        # synchronously.
+        self._hid_handle.send_feature_report(
+            bytes((_REPORT_SET_TRANSMIT_LINE_BREAK, 0)))
+        time.sleep(duration)
+        self._hid_handle.send_feature_report(
+            bytes((_REPORT_SET_STOP_LINE_BREAK)))
 
     def read(self, size=1):
         if not self.is_open:
