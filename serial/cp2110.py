@@ -8,9 +8,20 @@
 #
 # SPDX-License-Identifier:    BSD-3-Clause
 
+# This backend implements support for HID-to-UART devices manufactured
+# by Silicon Labs and marketed as CP2110 and CP2114. The
+# implementation is (mostly) OS-independent and in userland. It relies
+# on cython-hidapi (https://github.com/trezor/cython-hidapi).
+
 # The HID-to-UART protocol implemented by CP2110/4 is described in the
 # AN434 document from Silicon Labs:
 # https://www.silabs.com/documents/public/application-notes/AN434-CP2110-4-Interface-Specification.pdf
+
+# TODO items:
+
+# - rtscts support is configured for hardware flow control, but the
+#   signaling is missing (AN434 suggests this is done through GPIO).
+# - Cancelling reads and writes is not supported.
 
 import struct
 import threading
