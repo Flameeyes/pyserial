@@ -14,6 +14,7 @@
 
 import struct
 import threading
+import time
 
 try:
     import Queue
@@ -50,7 +51,9 @@ class Serial(SerialBase):
                  921600, 1000000)
 
     def __init__(self, *args, **kwargs):
+        self._hid_handle = None
         self._read_buffer = None
+        self._thread = None
         self.logger = None
         super(Serial, self).__init__(*args, **kwargs)
 
@@ -67,7 +70,7 @@ class Serial(SerialBase):
         self._hid_handle.open(0x10c4, 0xea80)
 
         try:
-            self._reconfigure_port(force_update=True)
+            self._reconfigure_port()
         except:
             try:
                 self._hid_handle.close()
@@ -85,12 +88,12 @@ class Serial(SerialBase):
     def close(self):
         self.is_open = False
         if self._thread:
-            self._thread.join(7)  # XXX more than socket timeout
+            self._thread.join(1)  # read timeout is 0.1
             self._thread = None
         self._hid_handle.close()
         self._hid_handle = None
 
-    def _reconfigure_port(self, force_update=False):
+    def _reconfigure_port(self):
         parity_value = None
         if self._parity == serial.PARITY_NONE:
             parity_value = 0x00
@@ -131,7 +134,7 @@ class Serial(SerialBase):
             stop_bits_value = 0x01
         else:
             raise ValueError('Invalid stop bit specification: {!r}'.format(self._stopbits))
-            
+
         configuration_report = struct.pack(
             '>BLBBBB',
             _REPORT_GETSET_UART_CONFIG,
@@ -201,15 +204,15 @@ class Serial(SerialBase):
     def write(self, data):
         if not self.is_open:
             raise portNotOpenError
-        d = to_bytes(data)
-        tx_len = length = len(d)
+        data = to_bytes(data)
+        tx_len = len(data)
         while tx_len > 0:
             to_be_sent = min(tx_len, 0x3F)
-            report = to_bytes([to_be_sent]) + d[:to_be_sent]
+            report = to_bytes([to_be_sent]) + data[:to_be_sent]
             self._hid_handle.write(report)
-            
-            d = d[to_be_sent:]
-            tx_len = len(d)
+
+            data = data[to_be_sent:]
+            tx_len = len(data)
 
     def _hid_read_loop(self):
         try:
