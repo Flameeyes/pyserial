@@ -16,6 +16,11 @@ import struct
 import threading
 
 try:
+    import urlparse
+except ImportError:
+    import urllib.parse as urlparse
+
+try:
     import Queue
 except ImportError:
     import queue as Queue
@@ -66,7 +71,11 @@ class Serial(SerialBase):
         self._read_buffer = Queue.Queue()
 
         self._hid_handle = hid.device()
-        self._hid_handle.open(0x10c4, 0xea80)
+        try:
+            portpath = self.from_url(self.portstr)
+            self._hid_handle.open_path(portpath)
+        except OSError as msg:
+            raise SerialException(msg.errno, "could not open port {}: {}".format(self._port, msg))
 
         try:
             self._reconfigure_port()
@@ -83,6 +92,17 @@ class Serial(SerialBase):
             self._thread.setDaemon(True)
             self._thread.setName('pySerial CP2110 reader thread for {}'.format(self._port))
             self._thread.start()
+
+    def from_url(self, url):
+        parts = urlparse.urlsplit(url)
+        if parts.scheme != "cp2110":
+            raise SerialException(
+                'expected a string in the forms '
+                '"cp2110:///dev/hidraw9" or "cp2110://0001:0023:00": '
+                'not starting with cp2110:// {{!r}}'.format(parts.scheme))
+        if parts.netloc:  # cp2100://BUS:DEVICE:ENDPOINT, for libusb
+            return parts.netloc.encode('utf-8')
+        return parts.path.encode('utf-8')
 
     def close(self):
         self.is_open = False
